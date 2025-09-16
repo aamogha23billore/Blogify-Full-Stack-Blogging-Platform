@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%- include("./partials/head") %> 
+  <title>Add Blog</title>
+
+  <!-- Quill CSS -->
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+</head>
+<body>
+  <%- include("./partials/nav") %>
+
+  <div class="container mt-3">
+    <form action="/blog" method="post" enctype="multipart/form-data" onsubmit="return prepareForm()">
+
+      <div class="mb-3">
+        <label for="coverImage" class="form-label">Cover Image</label>
+        <input type="file" class="form-control" id="coverImage" name="coverImage">
+      </div>
+
+      <div class="mb-3">
+        <label for="title" class="form-label">Title</label>
+        <input type="text" class="form-control" id="title" name="title">
+      </div>
+
+      <!-- Quill Editor -->
+      <div class="mb-3">
+        <label for="body" class="form-label">Body</label>
+        <div id="editor" style="height: 400px; background: #fff;"></div>
+        <textarea name="body" id="body" hidden></textarea>
+      </div>
+      
+      <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </div>
+    </form>
+  </div>
+
+  <%- include("./partials/scripts") %>
+
+  <!-- Quill JS -->
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
+  <script>
+    const quill = new Quill('#editor', {
+      theme: 'snow',
+      placeholder: 'Write your blog content here...',
+      modules: {
+        toolbar: {
+          container: [
+            [{ header: [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline'],
+            ['blockquote', 'code-block'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            ['link', 'image'] // include image button
+          ],
+          handlers: {
+            image: imageHandler
+          }
+        }
+      }
+    });
+
+    // Custom Image Handler
+    function imageHandler() {
+      const input = document.createElement('input');
+      input.setAttribute('type', 'file');
+      input.setAttribute('accept', 'image/*');
+      input.click();
+
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (file) {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          try {
+            const res = await fetch('/upload-image', {
+              method: 'POST',
+              body: formData
+            });
+            const data = await res.json();
+
+            if (data.location) {
+              const range = quill.getSelection();
+              quill.insertEmbed(range.index, 'image', data.location);
+            }
+          } catch (err) {
+            console.error('Image upload failed:', err);
+          }
+        }
+      };
+    }
+
+    // Save HTML content
+    function prepareForm() {
+      document.querySelector('#body').value = quill.root.innerHTML;
+      return true;
+    }
+  </script>
+</body>
+</html>
