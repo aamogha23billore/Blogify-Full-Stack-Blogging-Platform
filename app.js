@@ -1,3 +1,4 @@
+// app.js
 require("dotenv").config();
 const express = require("express");
 const path =require("path");
@@ -89,4 +90,5 @@ app.post("/upload-image", upload.single("file"), (req, res) => {
 // ------------------- SERVER START -------------------
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
+
 });
