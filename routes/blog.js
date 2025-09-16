@@ -1,24 +1,34 @@
 const { Router } = require("express");
-const path = require("path");
 const multer = require("multer");
 const Blog = require("../models/blog");
 const Comment = require("../models/comment");
 const { authorizeBlogOwnerOrAdmin } = require("../middlewares/authorization");
 
-const router = Router();
+// --- CLOUDINARY & MULTER SETUP ---
+const cloudinary = require("cloudinary").v2;
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
 
-// MULTER SETUP
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.resolve(__dirname, "../public/uploads"));
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "blogify-uploads",
+    allowedFormats: ["png", "jpg", "jpeg"],
   },
 });
-const upload = multer({ storage });
 
-// ROUTES
+const upload = multer({ storage });
+// --- END SETUP ---
+
+const router = Router();
+
+
+// --- ROUTES ---
 
 // Show Add Blog Page
 router.get("/add-new", (req, res) => {
@@ -33,12 +43,16 @@ router.post("/", upload.single("coverImage"), async (req, res) => {
       title,
       body,
       createdBy: req.user._id,
-      coverImageUrl: `/uploads/${req.file.filename}`,
+      coverImageUrl: req.file.path, 
     });
+    req.flash("success_msg", "Blog created successfully!"); // <-- ADDED
     res.redirect(`/blog/${blog._id}`);
   } catch (err) {
     console.error("❌ Error creating blog:", err);
-    res.status(500).send("Something went wrong");
+    res.render("addBlog", {
+        user: req.user,
+        error: "Blog creation failed. Please try again." // This error shows immediately on the form
+    });
   }
 });
 
@@ -50,22 +64,16 @@ router.get("/:id", async (req, res) => {
 });
 
 // Add Comment
-// Add Comment
 router.post("/comment/:blogId", async (req, res) => {
   const { content } = req.body;
   const { blogId } = req.params;
-
-  // Check if the content is not empty BEFORE creating a comment
   if (content && content.trim() !== "") {
-    // Only create a comment if there is actual content
     await Comment.create({
       content: content,
       blogId: blogId,
       createdBy: req.user._id,
     });
   }
-
-  // Always redirect back, whether a comment was created or not
   return res.redirect(`/blog/${blogId}`);
 });
 
@@ -74,21 +82,17 @@ router.get("/:id/edit", authorizeBlogOwnerOrAdmin, async (req, res) => {
   res.render("editBlog", { user: req.user, blog: req.blog });
 });
 
-
-// ------------------- THE FINAL FIX -------------------
-// THIS IS THE NEW, CORRECT ROUTE FOR UPDATING A BLOG
+// Update Blog
 router.post("/update/:id", upload.single("coverImage"), async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
 
     if (!blog) {
-        req.flash("error_msg", "Blog not found.");
-        return res.redirect("/");
+      req.flash("error_msg", "Blog not found."); 
+      return res.redirect("/");
     }
-
-    // Manual authorization check since the middleware might not match "/update/:id"
     if (blog.createdBy.toString() !== req.user._id.toString()) {
-      req.flash("error_msg", "Not authorized.");
+      req.flash("error_msg", "Not authorized."); 
       return res.redirect("/");
     }
 
@@ -97,7 +101,7 @@ router.post("/update/:id", upload.single("coverImage"), async (req, res) => {
     blog.body = body;
 
     if (req.file) {
-      blog.coverImageUrl = `/uploads/${req.file.filename}`;
+      blog.coverImageUrl = req.file.path;
     }
 
     await blog.save();
@@ -105,21 +109,21 @@ router.post("/update/:id", upload.single("coverImage"), async (req, res) => {
     res.redirect(`/blog/${blog._id}`);
   } catch (err) {
     console.error("❌ Error updating blog:", err);
-    res.status(500).send("Something went wrong");
+    req.flash("error_msg", "Something went wrong during the update."); 
+    res.redirect("/");
   }
 });
-// ----------------------------------------------------
-
 
 // Delete Blog
 router.delete("/:id", authorizeBlogOwnerOrAdmin, async (req, res) => {
   try {
     await req.blog.deleteOne();
-    req.flash("success_msg", "Blog deleted successfully.");
+    req.flash("success_msg", "Blog deleted successfully."); 
     res.redirect("/");
   } catch (err) {
     console.error("❌ Error deleting blog:", err);
-    res.status(500).send("Something went wrong");
+    req.flash("error_msg", "Something went wrong while deleting the blog."); 
+    res.redirect("/");
   }
 });
 
